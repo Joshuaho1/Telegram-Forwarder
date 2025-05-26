@@ -1,24 +1,7 @@
-def parse_chats(chats):
-    """
+# utils.py
+import re
 
-    [[chats]]
-    from = "123456789"
-    to = "123456789"
-
-    [[chats]]
-    from = ["123456789", "123456789"]
-    to = "123456789"
-
-    [[chats]]
-    from = "123456789"
-    to = ["123456789", "123456789"]
-
-    [[chats]]
-    from = ["123456789", "123456789"]
-    to = ["123456789", "123456789"]
-    """
-
-    # Set all from values to a list and, from => [to, replace] in dict
+async def parse_chats(app, chats):
     monitored_chats = set()
     chats_map = {}
 
@@ -33,13 +16,58 @@ def parse_chats(chats):
         if not isinstance(to_chats, list):
             to_chats = [to_chats]
 
-        for from_chat in from_chats:
+        # Resolve from_chats usernames to IDs
+        resolved_from_chats = []
+        for chat_id_or_username in from_chats:
+            if isinstance(chat_id_or_username, int):
+                resolved_from_chats.append(chat_id_or_username)
+            else:
+                # resolve username to ID
+                chat_obj = await app.get_chat(chat_id_or_username)
+                resolved_from_chats.append(chat_obj.id)
+
+        # Resolve to_chats usernames to IDs
+        resolved_to_chats = []
+        for chat_id_or_username in to_chats:
+            if isinstance(chat_id_or_username, int):
+                resolved_to_chats.append(chat_id_or_username)
+            else:
+                chat_obj = await app.get_chat(chat_id_or_username)
+                resolved_to_chats.append(chat_obj.id)
+
+        # Build mapping
+        for from_chat in resolved_from_chats:
             if from_chat not in chats_map:
                 chats_map[from_chat] = {"to": set(), "replace": replace}
 
-            for to_chat in to_chats:
-                chats_map[from_chat]['to'].add(to_chat)
-            
+            for to_chat in resolved_to_chats:
+                chats_map[from_chat]["to"].add(to_chat)
+
             monitored_chats.add(from_chat)
 
     return list(monitored_chats), chats_map
+
+from pyrogram.types import Message, MessageEntity
+
+def extract_token_address(message: Message) -> str | None:
+    text = message.text or message.caption
+
+	# # Try to match solscan or mevx URLs
+    # url_match = re.search(r"(?:solscan\.io/token/|mevx\.io/solana/)([A-Za-z0-9]{32,50})", text)
+    # if url_match:
+    #     return url_match.group(1)
+    
+    entities = message.entities or []
+    for entity in entities:
+        if entity.type == "text_link":
+            url = entity.url
+            match = re.search(r"(?:solscan\.io/token/|mevx\.io/solana/)([A-Za-z0-9]{32,50})", url)
+            if match:
+                return match.group(1)
+            
+    # Fallback: generic token-like pattern
+    generic_match = re.search(r"([A-Za-z0-9]{32,50})", text)
+    if generic_match:
+        return generic_match.group(1)
+
+    return None

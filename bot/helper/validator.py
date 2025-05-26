@@ -70,6 +70,11 @@ CONFIG_SCHEMA = {
             },
             "minItems": 1,
         },
+		"keywords": {
+            "type": "array",
+            "items": {"type": "string"},
+            "uniqueItems": True,
+        },
     },
     "required": ["pyrogram", "chats"],
 }
